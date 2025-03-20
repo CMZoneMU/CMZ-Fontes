@@ -1,6 +1,6 @@
 #pragma once
 
-#define MAX_LOG_TEXT_LINE 30
+#define MAX_LOG_TEXT_LINE 36
 #define MAX_LOG_TEXT_SIZE 256
 
 enum eLogColor
@@ -36,11 +36,22 @@ public:
 
 	void PaintAllInfo();
 
-	void LogTextPaint();
-
 	void LogAddText(eLogColor color, char* text, int size);
 
+	void InitializeBuffer(); // (new)
+	
+	void ConfigureWindow(HWND hWnd);// (ne)
+
 private:
+
+
+	HDC m_hdcBuffer; // (new)
+
+	HBITMAP m_hbmBuffer; // (new)
+
+	HBITMAP m_hbmOldBuffer; // (new)
+
+	HBITMAP m_hTopImage; // (new)
 
 	HWND m_hwnd;
 
@@ -48,7 +59,7 @@ private:
 
 	HFONT m_logfont;
 
-	HBRUSH m_brush[2];
+	HBRUSH m_brush;
 
 	LOG_DISPLAY_INFO m_log[MAX_LOG_TEXT_LINE];
 
@@ -56,24 +67,9 @@ private:
 
 	char m_DisplayerText[2][64];
 
-	// Novas variáveis para double buffering
-	
-	HDC m_hdcBuffer;
+	WNDPROC m_OldWndProc; // (new)
 
-	HBITMAP m_hbmBuffer;
-
-	HBITMAP m_hbmOldBuffer;
-
-private:
-
-	WNDPROC m_OldWndProc;
-
-	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-	
-	// Adicione estas linhas na seção private da classe
-private:
-	HBITMAP m_hTopImage;
-
+	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam); // (new)
 };
 
 extern CServerDisplayer gServerDisplayer;

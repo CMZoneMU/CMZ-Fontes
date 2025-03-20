@@ -18,17 +18,15 @@ CServerDisplayer::CServerDisplayer()
 		memset(&this->m_log[n], 0, sizeof(this->m_log[n]));
 	}
 
-	this->m_font = CreateFont(70, 0, 0, 0, FW_THIN, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Verdana");
-
 	this->m_logfont = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Verdana");
 
 	this->m_hTopImage = NULL;  // Inicializa o handle da imagem
 
-	// Carregar a imagem
 	this->m_hTopImage = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_BITMAP1));
 
-	// Inicializa variáveis de buffer
+	this->m_brush = CreateSolidBrush(RGB(207,207, 203)); 
 
+	// Inicializa variáveis de buffer
 	this->m_hdcBuffer = NULL;
 
 	this->m_hbmBuffer = NULL;
@@ -42,37 +40,23 @@ CServerDisplayer::~CServerDisplayer()
 
 	DeleteObject(this->m_logfont);
 
-	DeleteObject(this->m_brush[0]);
-
-	DeleteObject(this->m_brush[1]);
-
-	// ... código existente ...
+	DeleteObject(this->m_brush);
 
 	if (this->m_hTopImage)
 	{
 		DeleteObject(this->m_hTopImage);
 	}
 
-	// Limpa recursos de buffer
-	if (this->m_hdcBuffer)
-	{
-		SelectObject(this->m_hdcBuffer, this->m_hbmOldBuffer);
-
-		DeleteObject(this->m_hbmBuffer);
-
-		DeleteDC(this->m_hdcBuffer);
-	}
-
 }
 
-void CServerDisplayer::Init(HWND hWnd)
+void CServerDisplayer::ConfigureWindow(HWND hWnd) // (new)
 {
 	this->m_hwnd = hWnd;
 
 	// Configurar estilo e posição da janela
-	const int windowWidth = 800; // Largura da janela
+	const int windowWidth = 800;
 
-	const int windowHeight = 750; // Altura da janela
+	const int windowHeight = 900;
 
 	int screenWidth = GetSystemMetrics(SM_CXSCREEN);
 
@@ -97,8 +81,45 @@ void CServerDisplayer::Init(HWND hWnd)
 
 	// Configurar procedimento de janela personalizada
 	m_OldWndProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
-	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)this);
 
+	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)this);
+}
+
+void CServerDisplayer::InitializeBuffer()
+{
+	if (this->m_hwnd == NULL) return;
+
+	HDC hdc = GetDC(this->m_hwnd);
+
+	RECT rect;
+
+	GetClientRect(this->m_hwnd, &rect);
+
+	// Limpar buffer antigo se existir
+	if (this->m_hdcBuffer)
+	{
+		SelectObject(this->m_hdcBuffer, this->m_hbmOldBuffer);
+
+		DeleteObject(this->m_hbmBuffer);
+
+		DeleteDC(this->m_hdcBuffer);
+	}
+
+	// Criar novo buffer
+	this->m_hdcBuffer = CreateCompatibleDC(hdc);
+
+	this->m_hbmBuffer = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
+
+	this->m_hbmOldBuffer = (HBITMAP)SelectObject(this->m_hdcBuffer, this->m_hbmBuffer);
+
+	ReleaseDC(this->m_hwnd, hdc);
+}
+
+void CServerDisplayer::Init(HWND hWnd)
+{
+	this->m_hwnd = hWnd;
+
+	ConfigureWindow(hWnd);
 
 	gLog.AddLog(true, "LOG");
 
@@ -113,6 +134,8 @@ void CServerDisplayer::Init(HWND hWnd)
 	gLog.AddLog(gServerInfo.m_WriteHackLog, "HACK_LOG");
 
 	gLog.AddLog(gServerInfo.m_WriteChaosMixLog, "CHAOS_MIX_LOG");
+
+	gServerDisplayer.InitializeBuffer();
 }
 
 void CServerDisplayer::Run()
@@ -122,10 +145,7 @@ void CServerDisplayer::Run()
 		return;
 	}
 
-	// Força atualização da janela
-	InvalidateRect(this->m_hwnd, NULL, FALSE);
-
-	UpdateWindow(this->m_hwnd);
+	this->PaintAllInfo();
 }
 
 void CServerDisplayer::SetWindowName()
@@ -139,158 +159,122 @@ void CServerDisplayer::SetWindowName()
 
 void CServerDisplayer::PaintAllInfo()
 {
+	if (!this->m_hwnd) return;
+
 	RECT rect;
 
 	GetClientRect(this->m_hwnd, &rect);
 
-	rect.top = 0;
-
-	rect.bottom = 80;
-
 	HDC hdc = GetDC(this->m_hwnd);
 
+	// Criar buffer único
 	HDC hdcMem = CreateCompatibleDC(hdc);
 
-	HBITMAP hbmMem = CreateCompatibleBitmap(hdc, rect.right - rect.left, rect.bottom - rect.top);
+	HBITMAP hbmMem = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
 
 	HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
 
-	// Desenhar a imagem redimensionada
+	// Limpar fundo
+	HBRUSH hBrush = CreateSolidBrush(RGB(207, 207, 203));
+
+	FillRect(hdcMem, &rect, hBrush);
+
+	DeleteObject(hBrush);
+
+	// Desenhar imagem
 	if (this->m_hTopImage)
 	{
 		BITMAP bmp;
 		GetObject(this->m_hTopImage, sizeof(BITMAP), &bmp);
 
 		HDC hdcBmp = CreateCompatibleDC(hdcMem);
+
 		HBITMAP hbmOldBmp = (HBITMAP)SelectObject(hdcBmp, this->m_hTopImage);
 
-		// Usar StretchBlt para redimensionar a imagem
-		StretchBlt(hdcMem, 0, 0, rect.right - rect.left, rect.bottom,
+		StretchBlt(hdcMem, 0, 0, rect.right, 120,
 			hdcBmp, 0, 0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
 
 		SelectObject(hdcBmp, hbmOldBmp);
+
 		DeleteDC(hdcBmp);
 	}
 
-	// Configurações do buffer de memória
-	SetBkMode(hdcMem, TRANSPARENT);
-	HFONT OldFont = (HFONT)SelectObject(hdcMem, this->m_font);
+	// Desenhar logs
+	int line = MAX_LOG_TEXT_LINE;
 
-	// Renderizar título no buffer de memória
-	if (gJoinServerConnection.CheckState() == 0 || gDataServerConnection.CheckState() == 0)
-	{
-		SetTextColor(hdcMem, RGB(200, 200, 200));
-		DrawText(hdcMem, this->m_DisplayerText[0], -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	}
-	else
-	{
-		gGameServerDisconnect = 0;
-		SetTextColor(hdcMem, RGB(250, 250, 250));
-		DrawText(hdcMem, this->m_DisplayerText[1], -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-	}
+	int count = (((this->m_count - 1) >= 0) ? (this->m_count - 1) : (MAX_LOG_TEXT_LINE - 1));
 
-	// Copiar do buffer de memória para a tela
-	BitBlt(hdc, 0, rect.top, rect.right - rect.left, rect.bottom - rect.top,
-		hdcMem, 0, 0, SRCCOPY);
-
-	// Restaurar e limpar recursos
-	SelectObject(hdcMem, OldFont);
-
-	SelectObject(hdcMem, hbmOld);
-
-	DeleteObject(hbmMem);
-
-	DeleteDC(hdcMem);
-
-	ReleaseDC(this->m_hwnd, hdc);
-
-}
-
-void CServerDisplayer::LogTextPaint()
-{
-	RECT rect;
-	GetClientRect(this->m_hwnd, &rect);
-	rect.top = 80;
-
-	HDC hdc = GetDC(this->m_hwnd);
-	HDC hdcMem = CreateCompatibleDC(hdc);
-	HBITMAP hbmMem = CreateCompatibleBitmap(hdc, rect.right - rect.left, rect.bottom - rect.top);
-	HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
-
-	// Configurações iniciais no buffer
 	SetBkMode(hdcMem, TRANSPARENT);
 
-	HFONT OldFont = (HFONT)SelectObject(hdcMem, this->m_logfont);
+	SelectObject(hdcMem, this->m_logfont);
 
 	SetTextColor(hdcMem, RGB(255, 255, 255));
-
-	SetBkColor(hdcMem, RGB(0, 0, 0));
-
-	// Preencher fundo
-	FillRect(hdcMem, &rect, (HBRUSH)COLOR_CAPTIONTEXT);
-
-	int line = MAX_LOG_TEXT_LINE;
-	int count = (((this->m_count - 1) >= 0) ? (this->m_count - 1) : (MAX_LOG_TEXT_LINE - 1));
 
 	for (int n = 0; n < MAX_LOG_TEXT_LINE; n++)
 	{
 		switch (this->m_log[count].color)
 		{
 		case LOG_BLACK:
-			SetBkMode(hdcMem, TRANSPARENT);
+
 			SetTextColor(hdcMem, RGB(255, 255, 255));
+
 			break;
 
 		case LOG_RED:
-			SetBkMode(hdcMem, TRANSPARENT);
+
 			SetTextColor(hdcMem, RGB(255, 0, 0));
+
 			break;
 
 		case LOG_GREEN:
-			SetBkMode(hdcMem, TRANSPARENT);
+
 			SetTextColor(hdcMem, RGB(0, 255, 0));
+
 			break;
 
 		case LOG_BLUE:
-			SetBkMode(hdcMem, TRANSPARENT);
+
 			SetTextColor(hdcMem, RGB(0, 0, 255));
+
 			break;
 
 		case LOG_ALERT:
+
 			SetBkMode(hdcMem, OPAQUE);
+
 			SetBkColor(hdcMem, RGB(255, 0, 0));
+
 			SetTextColor(hdcMem, RGB(0, 0, 0));
+
 			break;
 
 		case LOG_USER:
-			SetBkMode(hdcMem, TRANSPARENT);
+
 			SetTextColor(hdcMem, RGB(140, 30, 160));
+
 			break;
 
 		case LOG_EVENT:
-			SetBkMode(hdcMem, TRANSPARENT);
+
 			SetTextColor(hdcMem, RGB(64, 192, 192));
+
 			break;
 		}
 
 		int size = strlen(this->m_log[count].text);
 		if (size > 1)
 		{
-			TextOut(hdcMem, 10, (rect.bottom - 475 + (line * 15)),
-				this->m_log[count].text, size);
+			TextOut(hdcMem, 10, (rect.bottom - 554 + (line * 15)), this->m_log[count].text, size);
 			line--;
 		}
 
 		count = (((--count) >= 0) ? count : (MAX_LOG_TEXT_LINE - 1));
 	}
 
-	// Copiar do buffer de memória para a tela
-	BitBlt(hdc, 0, rect.top, rect.right - rect.left, rect.bottom - rect.top,
-		hdcMem, 0, 0, SRCCOPY);
+	// Copiar buffer para a tela
+	BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
 
 	// Limpar recursos
-	SelectObject(hdcMem, OldFont);
-
 	SelectObject(hdcMem, hbmOld);
 
 	DeleteObject(hbmMem);
@@ -314,32 +298,41 @@ void CServerDisplayer::LogAddText(eLogColor color, char* text, int size)
 
 	gLog.Output(LOG_GENERAL, "%s", &text[9]);
 
-	this->Run();
+	//this->Run();
+
+	InvalidateRect(this->m_hwnd, NULL, FALSE);  // Substitui this->Run()
 }
 
-LRESULT CALLBACK CServerDisplayer::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK CServerDisplayer::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) // (new)
 {
 	CServerDisplayer* displayer = (CServerDisplayer*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
 	switch (msg)
 	{
-		case WM_ERASEBKGND:
-			return 1;
+	case WM_ERASEBKGND:
+		return 1;
 
-		case WM_PAINT:
-		{
-			PAINTSTRUCT ps;
+	case WM_PAINT:
+	{
+		PAINTSTRUCT ps;
 
-			HDC hdc = BeginPaint(hwnd, &ps);
+		HDC hdc = BeginPaint(hwnd, &ps);
 
-			displayer->PaintAllInfo();
+		displayer->PaintAllInfo();  // Chama apenas PaintAllInfo
 
-			displayer->LogTextPaint();
+		EndPaint(hwnd, &ps);
 
-			EndPaint(hwnd, &ps);
+		return 0;
+	}
 
-			return 0;
-		}
+	case WM_SIZE:
+	{
+		if (displayer) displayer->InitializeBuffer();
+
+		InvalidateRect(hwnd, NULL, FALSE);
+
+		break;
+	}
 	}
 
 	return CallWindowProc(displayer->m_OldWndProc, hwnd, msg, wParam, lParam);
