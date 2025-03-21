@@ -34,13 +34,15 @@ public:
 
 	void SetWindowName();
 
-	void PaintAllInfo();
+	void ImgTop();
 
 	void LogAddText(eLogColor color, char* text, int size);
 
 	void InitializeBuffer(); // (new)
 	
 	void ConfigureWindow(HWND hWnd);// (ne)
+
+	void DrawLogs(HDC hdcMem, RECT rect);
 
 private:
 
@@ -59,7 +61,7 @@ private:
 
 	HFONT m_logfont;
 
-	HBRUSH m_brush;
+	HBRUSH m_brush[3];
 
 	LOG_DISPLAY_INFO m_log[MAX_LOG_TEXT_LINE];
 
